@@ -1,0 +1,21 @@
+[package]
+name = "webpub"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fastcdc = "3"
+blake3 = "1"
+rmp-serde = "1"
+serde = { version = "1", features = ["derive"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+axum = "0.7"
+clap = { version = "4", features = ["derive"] }
+thiserror = "1"
+hex = "0.4"
+mime_guess = "2"
+
+[dev-dependencies]
+tempfile = "3"
