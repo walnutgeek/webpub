@@ -57,6 +57,16 @@ enum Commands {
         #[arg(long, default_value = "./data")]
         data: PathBuf,
     },
+    /// Push directory to server
+    Push {
+        /// Source directory
+        dir: PathBuf,
+        /// Server WebSocket URL
+        server: String,
+        /// Hostname to publish as
+        #[arg(long)]
+        host: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -167,6 +177,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Gc { data: _ } => {
             println!("Garbage collection not yet implemented");
+        }
+        Commands::Push { dir, server, host } => {
+            let token = std::env::var("WEBPUB_TOKEN")
+                .map_err(|_| "WEBPUB_TOKEN environment variable not set")?;
+
+            let snapshot_id = webpub::client::push::push(&dir, &server, &host, &token).await?;
+            println!("Successfully deployed snapshot {}", snapshot_id);
         }
     }
 

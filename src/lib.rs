@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod chunker;
+pub mod client;
 pub mod merkle;
 pub mod protocol;
 pub mod scanner;
