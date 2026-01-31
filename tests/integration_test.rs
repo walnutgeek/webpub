@@ -16,6 +16,13 @@ async fn test_push_and_serve() {
     fs::create_dir(site_dir.join("css")).unwrap();
     fs::write(site_dir.join("css/style.css"), "body { color: red; }").unwrap();
 
+    // Add token BEFORE starting server (server will see it on startup)
+    let output = Command::new(env!("CARGO_BIN_EXE_webpub"))
+        .args(["token", "--data", data_dir.to_str().unwrap(), "add"])
+        .output()
+        .unwrap();
+    let token = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
     // Start server
     let mut server = Command::new(env!("CARGO_BIN_EXE_webpub"))
         .args([
@@ -34,13 +41,6 @@ async fn test_push_and_serve() {
 
     // Wait for server to start
     tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Add token
-    let output = Command::new(env!("CARGO_BIN_EXE_webpub"))
-        .args(["token", "add", "--data", data_dir.to_str().unwrap()])
-        .output()
-        .unwrap();
-    let token = String::from_utf8(output.stdout).unwrap().trim().to_string();
 
     // Push site
     let status = Command::new(env!("CARGO_BIN_EXE_webpub"))

@@ -63,6 +63,14 @@ impl Storage {
         let index_path = path.join("index.db");
         let index = Connection::open(&index_path)?;
 
+        // Enable WAL mode for better concurrent access from multiple processes
+        // Set busy timeout to wait for locks instead of failing immediately
+        index.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA busy_timeout=5000;
+             PRAGMA synchronous=NORMAL;",
+        )?;
+
         // Initialize index schema
         index.execute_batch(
             r#"
