@@ -1,4 +1,6 @@
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+use webpub::{archive, build_tree, scan_directory};
 
 #[derive(Parser)]
 #[command(name = "webpub")]
@@ -13,30 +15,38 @@ enum Commands {
     /// Create archive from directory
     Archive {
         /// Source directory
-        dir: std::path::PathBuf,
+        dir: PathBuf,
         /// Output archive file
-        output: std::path::PathBuf,
+        output: PathBuf,
     },
     /// Extract archive to directory
     Extract {
         /// Archive file
-        archive: std::path::PathBuf,
+        archive: PathBuf,
         /// Output directory
-        output: std::path::PathBuf,
+        output: PathBuf,
     },
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Archive { dir, output } => {
-            println!("Archive {:?} -> {:?}", dir, output);
-            todo!("archive command")
+            let entry = scan_directory(&dir)?
+                .next()
+                .ok_or("Failed to scan directory")?;
+            let (tree, chunks) = build_tree(entry);
+            archive::write_archive(&output, &tree, &chunks)?;
+            println!("Created archive: {}", output.display());
+            println!("  Tree hash: {}", hex::encode(tree.hash()));
+            println!("  Chunks: {}", chunks.len());
         }
-        Commands::Extract { archive, output } => {
-            println!("Extract {:?} -> {:?}", archive, output);
-            todo!("extract command")
+        Commands::Extract { archive: archive_path, output } => {
+            archive::read_archive(&archive_path, &output)?;
+            println!("Extracted to: {}", output.display());
         }
     }
+
+    Ok(())
 }
