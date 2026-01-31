@@ -96,6 +96,47 @@ async fn handle_sync(
 
                 println!("Deployed {} snapshot {}", hostname, snapshot_id);
             }
+            ClientMessage::ListSnapshots { hostname } => {
+                let snapshots = storage.list_snapshots(&hostname)?;
+                // Convert from (i64, bool, String) to (u64, String, bool)
+                let snapshots: Vec<(u64, String, bool)> = snapshots
+                    .into_iter()
+                    .map(|(id, is_current, created_at)| (id as u64, created_at, is_current))
+                    .collect();
+                let response = rmp_serde::to_vec(&ServerMessage::SnapshotList { snapshots })?;
+                ws.send(Message::Binary(response)).await?;
+            }
+            ClientMessage::Rollback { hostname, snapshot_id } => {
+                // If no snapshot_id given, use previous (second most recent)
+                let snapshots = storage.list_snapshots(&hostname)?;
+                let target_id = match snapshot_id {
+                    Some(id) => id as i64,
+                    None => {
+                        // Find previous (second in list since list is sorted by id DESC)
+                        if snapshots.len() < 2 {
+                            let response = rmp_serde::to_vec(&ServerMessage::RollbackFailed {
+                                reason: "No previous snapshot to rollback to".to_string(),
+                            })?;
+                            ws.send(Message::Binary(response)).await?;
+                            continue;
+                        }
+                        snapshots[1].0 // Second snapshot (previous)
+                    }
+                };
+
+                if storage.set_current_snapshot(&hostname, target_id)? {
+                    let response = rmp_serde::to_vec(&ServerMessage::RollbackOk {
+                        snapshot_id: target_id as u64,
+                    })?;
+                    ws.send(Message::Binary(response)).await?;
+                    println!("Rolled back {} to snapshot {}", hostname, target_id);
+                } else {
+                    let response = rmp_serde::to_vec(&ServerMessage::RollbackFailed {
+                        reason: "Snapshot not found".to_string(),
+                    })?;
+                    ws.send(Message::Binary(response)).await?;
+                }
+            }
             _ => {}
         }
     }

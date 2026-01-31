@@ -67,6 +67,25 @@ enum Commands {
         #[arg(long)]
         host: String,
     },
+    /// List snapshots for a site
+    List {
+        /// Server WebSocket URL
+        server: String,
+        /// Hostname
+        #[arg(long)]
+        host: String,
+    },
+    /// Rollback to previous or specific snapshot
+    Rollback {
+        /// Server WebSocket URL
+        server: String,
+        /// Hostname
+        #[arg(long)]
+        host: String,
+        /// Specific snapshot ID (default: previous)
+        #[arg(long)]
+        to: Option<u64>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -184,6 +203,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let snapshot_id = webpub::client::push::push(&dir, &server, &host, &token).await?;
             println!("Successfully deployed snapshot {}", snapshot_id);
+        }
+        Commands::List { server, host } => {
+            let token = std::env::var("WEBPUB_TOKEN")
+                .map_err(|_| "WEBPUB_TOKEN environment variable not set")?;
+
+            let snapshots = webpub::client::list::list(&server, &host, &token).await?;
+            if snapshots.is_empty() {
+                println!("No snapshots for {}", host);
+            } else {
+                println!("Snapshots for {}:", host);
+                for (id, created_at, is_current) in snapshots {
+                    let current_marker = if is_current { " (current)" } else { "" };
+                    println!("  {} - {}{}", id, created_at, current_marker);
+                }
+            }
+        }
+        Commands::Rollback { server, host, to } => {
+            let token = std::env::var("WEBPUB_TOKEN")
+                .map_err(|_| "WEBPUB_TOKEN environment variable not set")?;
+
+            let snapshot_id = webpub::client::rollback::rollback(&server, &host, &token, to).await?;
+            println!("Rolled back {} to snapshot {}", host, snapshot_id);
         }
     }
 
