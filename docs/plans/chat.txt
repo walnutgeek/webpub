@@ -1,0 +1,819 @@
+❯ /superpowers:brainstorm
+
+⏺ Skill(superpowers:brainstorming)
+  ⎿  Successfully loaded skill
+
+⏺ I'll help you brainstorm. Let me first understand the current project context.
+
+⏺ Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(git log --oneline -10 2>/dev/null || echo "Not a git repo or no commits")
+  ⎿  Not a git repo or no commits
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ This is an empty directory called rusync. The name suggests you might be thinking about building something in Rust related to
+  syncing.
+
+  What are you thinking of building?
+
+  a) An rsync-like file synchronization tool in Rust
+  b) A real-time file/folder sync daemon
+  c) A cloud storage sync client (like Dropbox)
+  d) Something else entirely - tell me more
+
+❯ a - file syncronisation and deduplication tool in rust using rustic-core, not exacty rsync use case but good guess
+
+⏺ Interesting - so you're looking at restic-style content-addressable deduplication with rustic-core as the foundation. That's a
+  powerful approach for backup and sync.
+
+  What's the primary use case you're solving for?
+
+  a) Backup local files to a repository (like restic/rustic itself)
+  b) Sync files between two locations with deduplication (bidirectional)
+  c) One-way sync/mirror with deduplication to save space
+  d) Something more specific - describe your scenario
+
+❯ Our primary two use cases.
+  1. Basicaly (c) To have server that publishes static website and client pushes new website files prepared somewhere and I
+  want to quickly sync those file trees without coping chunks that already copied, switch to be atomic, and server could be
+  cofigured keep a few snapshots around, and rollback if necessary. Without any encryption.
+  2. A client part, apart from the syncing directory of the files with a server, should be able to do archive like a zip file.
+   A single archive that contains all files from a directory, doing cdc chunking, store all chunks, file names/permissions and
+   a whole merkle tree without any encryption.
+
+⏺ Great, these are clear use cases. Let me make sure I understand the relationship between them.
+
+  Should the archive format (use case 2) be the same format used for server sync (use case 1)?
+
+  a) Yes - the archive is what gets transferred to the server, server stores/serves from it
+  b) No - they're independent features that happen to share CDC chunking logic
+  c) Partially - shared chunk format, but different container/metadata structures
+
+❯ b) client part always goes through the file tree and analyzing files making chunks in memory. What to do with the chunks?
+  Diverge is dependent on use cases:
+  * In the first case, it communicates with the server about a chunk that just created, probably through WebSocket interface,
+  whether it wants to send it over to server or server already have it. It keeps going until it's finished and then it
+  confirms that server has the same Merkle tree, and command to flip website to a new content.
+  * For second use case, it just dumps those chunks in the file and at the end write file names, permissions with Merkle tree
+  into the archive.
+  There is no point to do encryption because it's a Public website. Encryption could be optional for archive usecase, I guess
+  But I would keep it out of the scope for now.
+
+⏺ That makes sense - shared chunking core with two different "sinks" for the output.
+
+  For the server side (use case 1), how should it serve the static website?
+
+  a) Reconstruct actual files on disk after sync, serve with nginx/caddy
+  b) Serve directly from chunk storage with custom HTTP server (reassemble on request)
+  c) Hybrid - reconstruct files but keep chunks for dedup/rollback
+
+❯ b
+
+⏺ Interesting choice - that keeps storage deduplicated and makes rollback instant (just swap which Merkle root you're serving
+  from).
+
+  For serving performance, how should the server handle reassembly?
+
+  a) Reassemble on every request (simplest, relies on OS page cache for chunks)
+  b) LRU cache of recently assembled files in memory
+  c) Lazy reconstruction - assemble to temp files on first request, invalidate on new snapshot
+  d) Let me configure this later - start with simplest approach
+
+❯ a) I would not worry about performance for now. Correctness and simplicity of the code, I guess, better values for now.
+
+⏺ Good call - correctness and simplicity first, optimize later if needed.
+
+  For CDC chunking, rustic-core uses the same algorithm as restic (Rabin fingerprinting). Should we:
+
+  a) Use rustic-core's chunking directly (proven, but brings in more of rustic's abstractions)
+  b) Use a standalone CDC crate like fastcdc (simpler integration, well-tested)
+  c) You have a preference for a specific chunking approach
+
+❯ b
+
+⏺ Got it - fastcdc for chunking.
+
+  Quick clarification: you mentioned rustic-core initially. What role should it play now?
+
+  a) Don't use rustic-core at all - build with fastcdc + custom storage
+  b) Use rustic-core for repository format/storage, but fastcdc for chunking
+  c) Just reference rustic-core's design for inspiration, build from scratch
+
+❯ a) No rustic-core. Simplicity of the code is the value.
+
+⏺ Clear - clean slate with fastcdc and custom everything. Simpler to understand and maintain.
+
+  For the WebSocket protocol between client and server, what style do you prefer?
+
+  a) Simple JSON messages (easy to debug, human-readable)
+  b) Binary protocol with msgpack or similar (more efficient for chunk data)
+  c) Hybrid - JSON for control messages, binary frames for chunk data
+
+❯ b
+
+⏺ For the archive file format (use case 2), similar question - what structure?
+
+  a) Single file with msgpack: header + chunks + index at the end
+  b) Tar-like structure with custom headers
+  c) SQLite file (easy to query, atomic writes, but heavier dependency)
+
+❯ a
+
+⏺ For the Merkle tree structure representing the file tree, what granularity?
+
+  a) Flat - just hash all chunk hashes together for each file, then hash all file hashes
+  b) Hierarchical - mirrors directory structure (dir hash = hash of children hashes)
+  c) Content-only - tree of chunks regardless of file boundaries (like restic's approach)
+
+❯ b) Hierarchical - yes (dir hash = hash of children's (name,permissions,hash) tuples, file hash = Hush of the chunks
+  hushes.). Also sort children predictably by name, So same content will yield same dir hash.
+
+⏺ Clear - hierarchical tree with deterministic ordering. That also makes diffing efficient (compare hashes, drill into
+  differences).
+
+  What hash algorithm for the Merkle tree and chunk addressing?
+
+  a) BLAKE3 (fast, modern, 256-bit)
+  b) SHA-256 (widely used, battle-tested)
+  c) xxHash or similar (faster but not cryptographic - fine since no security requirement)
+
+❯ a
+
+⏺ For server-side snapshot retention, how should it work?
+
+  a) Keep last N snapshots (configurable, e.g., keep 5)
+  b) Time-based (keep snapshots from last N days/hours)
+  c) Manual - server keeps all until explicitly deleted
+  d) Simple: keep previous + current only (one rollback level)
+
+❯ a
+
+⏺ When old snapshots are deleted, how should chunk garbage collection work?
+
+  a) Reference counting - track which snapshots use each chunk, delete when zero
+  b) Mark-and-sweep - periodically scan all live snapshots, delete unreferenced chunks
+  c) Lazy/manual - don't auto-delete, provide a "gc" command to run when needed
+
+❯ c
+
+⏺ If a sync is interrupted mid-way (network drop, crash), what should happen on resume?
+
+  a) Start fresh - re-scan files, server keeps partial chunks until GC
+  b) Client tracks progress locally, resumes from last confirmed chunk
+  c) Don't handle specially - partial state is fine, next full sync will fix it
+
+❯ a or c seem the same to me
+
+⏺ You're right - they're equivalent. No special resume logic; just re-run sync. Server has whatever chunks arrived, client re-scans
+   and only sends what's missing. Simple.
+
+  How should the CLI be structured?
+
+  a) Single binary with subcommands (rusync push, rusync serve, rusync archive, rusync extract)
+  b) Separate binaries (rusync-client, rusync-server)
+  c) Library-first with thin CLI wrapper (prioritize the lib, CLI is just one consumer)
+
+❯ a
+
+⏺ For server configuration (port, snapshot retention, storage path), how should it be specified?
+
+  a) Command-line flags only (rusync serve --port 8080 --keep 5 --data ./data)
+  b) Config file (TOML/YAML)
+  c) Both - flags override config file defaults
+
+❯ a
+
+⏺ For client authentication to the server, what approach?
+
+  a) Shared secret/token passed as CLI flag or env var
+  b) No auth - rely on network-level security (firewall, VPN, etc.)
+  c) mTLS (client certificates)
+
+❯ a) Shared secret/token passed as env var on client; on server - Authorization database resides somewhere in data directory.
+
+⏺ How should the server's authorization database work?
+
+  a) Simple text file with one token per line
+  b) CLI commands to manage (rusync token add, rusync token revoke, rusync token list)
+  c) Just a single token in a file (simplest - one authorized client)
+
+❯ a
+
+⏺ How should symlinks, empty directories, and special files be handled?
+
+  a) Support symlinks and empty dirs, ignore special files (devices, sockets, etc.)
+  b) Files only - ignore symlinks, empty dirs, special files
+  c) Preserve everything possible (symlinks, empty dirs, permissions, but skip devices/sockets)
+
+❯ Preserve empty dirs. Ignore symlinks and special files.
+
+⏺ I think I have enough to present the design. Let me go section by section.
+
+  ---
+  Section 1: High-Level Architecture
+
+  rusync is a file sync and archive tool with content-based deduplication.
+
+  Core components:
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │                        rusync CLI                           │
+  │  push | serve | archive | extract | gc | token              │
+  └─────────────────────────────────────────────────────────────┘
+                                │
+  ┌─────────────────────────────────────────────────────────────┐
+  │                      Core Library                           │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐ │
+  │  │ Scanner  │  │ Chunker  │  │  Merkle  │  │ Serializer  │ │
+  │  │(file tree)│  │(fastcdc) │  │  Tree    │  │ (msgpack)   │ │
+  │  └──────────┘  └──────────┘  └──────────┘  └─────────────┘ │
+  └─────────────────────────────────────────────────────────────┘
+                                │
+          ┌─────────────────────┴─────────────────────┐
+          ▼                                           ▼
+  ┌───────────────────┐                   ┌───────────────────┐
+  │   Sync Backend    │                   │  Archive Backend  │
+  │   (WebSocket)     │                   │  (single file)    │
+  └───────────────────┘                   └───────────────────┘
+
+  Data flow:
+  1. Scanner walks directory tree, yields files with metadata
+  2. Chunker splits file content via fastcdc, produces chunks with BLAKE3 hashes
+  3. Merkle tree builder creates hierarchical structure
+  4. Backend writes chunks to destination (server or archive file)
+
+  Does this high-level structure look right so far?
+
+❯ Can you think of a better name, because we don't use Rustic-Core anymore?
+
+⏺ Good point! Some alternatives:
+
+  a) chunkd - emphasizes CDC chunking and deduplication
+  b) flipd - emphasizes the atomic flip for deployments
+  c) snapsync - snapshot-based sync
+  d) dedup - straightforward, describes what it does
+  e) hashflip - hash-addressed storage with atomic flip
+  f) Something else you have in mind?
+
+❯ The primary goal is to publish a web site, so can we think about some names that reflect publish and static web sites?
+
+⏺ Good direction. Some options:
+
+  a) siteflip - captures the atomic switch for websites
+  b) pubflip - publish + atomic flip
+  c) staticflip - explicit about static sites
+  d) shipsite - "ship it" + site
+  e) hotpub - hot-swap publishing
+  f) websnap - web + snapshots
+  g) Something else?
+
+❯ f
+
+⏺ websnap it is - short, memorable, and captures the snapshot-based web publishing.
+
+  Let me revise and continue the design.
+
+  ---
+  Section 1 (revised): High-Level Architecture
+
+  websnap is a static website publishing tool with content-based deduplication.
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │                       websnap CLI                           │
+  │  push | serve | archive | extract | gc | token              │
+  └─────────────────────────────────────────────────────────────┘
+                                │
+  ┌─────────────────────────────────────────────────────────────┐
+  │                      Core Library                           │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐ │
+  │  │ Scanner  │  │ Chunker  │  │  Merkle  │  │ Serializer  │ │
+  │  │(file tree)│  │(fastcdc) │  │  Tree    │  │ (msgpack)   │ │
+  │  └──────────┘  └──────────┘  └──────────┘  └─────────────┘ │
+  └─────────────────────────────────────────────────────────────┘
+                                │
+          ┌─────────────────────┴─────────────────────┐
+          ▼                                           ▼
+  ┌───────────────────┐                   ┌───────────────────┐
+  │   Sync Backend    │                   │  Archive Backend  │
+  │   (WebSocket)     │                   │  (single file)    │
+  └───────────────────┘                   └───────────────────┘
+
+  Data flow:
+  1. Scanner walks directory, yields files/dirs with metadata (name, permissions)
+  2. Chunker splits files via fastcdc, produces chunks with BLAKE3 hashes
+  3. Merkle tree builder creates hierarchical structure (sorted by name)
+  4. Backend writes to destination (server via WebSocket, or archive file)
+
+  Does this structure look right?
+
+❯ y
+
+⏺ ---
+  Section 2: Data Structures
+
+  Chunk:
+  struct Chunk {
+      hash: [u8; 32],  // BLAKE3 hash
+      data: Vec<u8>,   // raw content
+  }
+
+  Merkle tree nodes:
+  enum Node {
+      File {
+          name: String,
+          permissions: u32,
+          size: u64,
+          chunks: Vec<[u8; 32]>,  // ordered chunk hashes
+          hash: [u8; 32],         // BLAKE3(chunks concatenated)
+      },
+      Directory {
+          name: String,
+          permissions: u32,
+          children: Vec<Node>,    // sorted by name
+          hash: [u8; 32],         // BLAKE3(children's (name, perm, hash) tuples)
+      },
+  }
+
+  Snapshot (what server stores per deployment):
+  struct Snapshot {
+      id: u64,              // incrementing ID
+      root_hash: [u8; 32],  // hash of root directory node
+      tree: Node,           // full merkle tree (for serving)
+      created_at: u64,      // unix timestamp
+  }
+
+  Chunk storage: Flat directory of files named by hex-encoded hash. E.g., data/chunks/a1b2c3d4.... Simple, filesystem does the
+  indexing.
+
+  Does this data model look right?
+
+❯ y
+
+⏺ ---
+  Section 3: Sync Protocol (WebSocket)
+
+  Connection flow:
+  1. Client connects to ws://server:port/sync
+  2. Client sends Auth { token: "..." }
+  3. Server responds AuthOk or closes connection
+
+  Sync flow:
+  Client                              Server
+     │                                   │
+     │─── Auth { token } ───────────────>│
+     │<── AuthOk ────────────────────────│
+     │                                   │
+     │─── HaveChunks { hashes: [...] } ─>│  (batch of chunk hashes)
+     │<── NeedChunks { hashes: [...] } ──│  (which ones server wants)
+     │                                   │
+     │─── ChunkData { hash, data } ─────>│  (repeat for each needed)
+     │<── ChunkAck { hash } ─────────────│
+     │        ...                        │
+     │                                   │
+     │─── CommitTree { tree: Node } ────>│  (full merkle tree)
+     │<── CommitOk { snapshot_id } ──────│  (atomic flip done)
+     │                                   │
+
+  Messages (msgpack-encoded):
+  - HaveChunks sent in batches as client scans (doesn't wait for full scan)
+  - Server streams back NeedChunks responses
+  - Client sends chunk data only for needed chunks
+  - CommitTree includes full tree structure; server verifies all chunks exist before accepting
+
+  Does this protocol look right?
+
+❯ y
+
+⏺ ---
+  Section 4: HTTP Serving
+
+  Server runs two listeners:
+  1. WebSocket on configurable port for sync (e.g., --sync-port 9000)
+  2. HTTP on configurable port for serving website (e.g., --http-port 8080)
+
+  Request handling:
+  GET /path/to/file
+      │
+      ▼
+  ┌─────────────────────────────┐
+  │ Look up path in current     │
+  │ snapshot's merkle tree      │
+  └─────────────────────────────┘
+      │
+      ▼ (found File node)
+  ┌─────────────────────────────┐
+  │ Read chunks by hash from    │
+  │ chunk storage, concatenate  │
+  └─────────────────────────────┘
+      │
+      ▼
+  ┌─────────────────────────────┐
+  │ Return with Content-Type    │
+  │ (guess from extension)      │
+  └─────────────────────────────┘
+
+  Directory requests: GET /foo/ looks for index.html in that directory.
+
+  404: Path not in tree → 404 response.
+
+  Atomicity: Current snapshot pointer is swapped atomically. In-flight requests may serve from old snapshot; new requests get new
+  snapshot. No partial states visible.
+
+  Does this serving model look right?
+
+❯ y
+
+⏺ ---
+  Section 5: Archive Format
+
+  File structure (single .websnap file):
+  ┌────────────────────────────────┐
+  │ Header (fixed size)            │
+  │ - magic: "WEBSNAP\0" (8 bytes) │
+  │ - version: u8                  │
+  │ - index_offset: u64            │
+  │ - index_size: u64              │
+  ├────────────────────────────────┤
+  │ Chunks (variable)              │
+  │ - chunk 1 data                 │
+  │ - chunk 2 data                 │
+  │ - ...                          │
+  ├────────────────────────────────┤
+  │ Index (msgpack)                │
+  │ - tree: Node (full merkle)     │
+  │ - chunk_offsets: Map<hash,     │
+  │     (offset, size)>            │
+  └────────────────────────────────┘
+
+  Writing:
+  1. Write header with placeholder offsets
+  2. Stream chunks, track offsets in memory
+  3. Write msgpack index at end
+  4. Seek back, update header with final offsets
+
+  Reading (extract):
+  1. Read header, seek to index
+  2. Deserialize tree and chunk map
+  3. Walk tree, read chunks by offset, write files
+
+  Deduplication: Within a single archive, identical chunks stored once. Chunk offsets map allows random access.
+
+  Does this archive format look right?
+
+❯ We need to rename, because there is already a crate exist. So, let's call it webpub.
+
+⏺ webpub - even cleaner. Web publish.
+
+  Updating the archive format section:
+
+  File structure (single .webpub file):
+  ┌────────────────────────────────┐
+  │ Header (fixed size)            │
+  │ - magic: "WEBPUB\0\0" (8 bytes)│
+  │ - version: u8                  │
+  │ - index_offset: u64            │
+  │ - index_size: u64              │
+  ├────────────────────────────────┤
+  │ Chunks (variable)              │
+  │ - chunk 1 data                 │
+  │ - chunk 2 data                 │
+  │ - ...                          │
+  ├────────────────────────────────┤
+  │ Index (msgpack)                │
+  │ - tree: Node (full merkle)     │
+  │ - chunk_offsets: Map<hash,     │
+  │     (offset, size)>            │
+  └────────────────────────────────┘
+
+  Rest stays the same. Does this look right?
+
+❯ y
+
+⏺ ---
+  Section 6: CLI Commands
+
+  webpub push <dir> <server-url>
+      Push directory to server. Reads WEBPUB_TOKEN from env.
+      Example: webpub push ./dist ws://deploy.example.com:9000
+
+  webpub serve --http-port 8080 --sync-port 9000 --data ./data --keep 5
+      Run server. Serves HTTP and accepts sync connections.
+      --keep N: retain last N snapshots (default: 5)
+
+  webpub archive <dir> <output.webpub>
+      Create archive from directory.
+      Example: webpub archive ./dist site.webpub
+
+  webpub extract <archive.webpub> <output-dir>
+      Extract archive to directory.
+      Example: webpub extract site.webpub ./restored
+
+  webpub gc --data ./data
+      Remove chunks not referenced by any snapshot.
+
+  webpub token add --data ./data
+      Generate and add new token, print to stdout.
+
+  webpub token list --data ./data
+      List all tokens (shows partial hash for identification).
+
+  webpub token revoke <token> --data ./data
+      Remove token from authorized list.
+
+  Does this CLI look right?
+
+❯ y
+
+⏺ ---
+  Section 7: Server Data Directory
+
+  ./data/
+  ├── chunks/
+  │   ├── a1b2c3d4e5f6...   (chunk files named by hash)
+  │   ├── b2c3d4e5f6a1...
+  │   └── ...
+  ├── snapshots/
+  │   ├── 00001.msgpack     (snapshot metadata + tree)
+  │   ├── 00002.msgpack
+  │   └── ...
+  ├── current               (text file: "00002" - current snapshot ID)
+  └── tokens.txt            (one token per line)
+
+  Atomic flip: Write new snapshot file → fsync → update current file → fsync. Crash at any point leaves consistent state.
+
+  Snapshot file contents (msgpack):
+  struct SnapshotFile {
+      id: u64,
+      root_hash: [u8; 32],
+      tree: Node,
+      created_at: u64,
+  }
+
+  GC process:
+  1. Load all snapshots, collect referenced chunk hashes
+  2. List all files in chunks/
+  3. Delete files not in referenced set
+
+  Does this storage layout look right?
+
+❯ I woud use SQLiteDB. For chunks I would create 256 of them a1.db, b2.db..... Basically taking the first two letters of the
+  chunk as a DB name. And then we will have one DB that kind of organize it all. So snapshots and other data I would have
+  index.db.  And I think it makes sense to support multiple websites. There is a name of the website hostname and the http
+  header. We can use that. It will change `webpub push` contract to specify hostname as well.
+
+⏺ Good changes - SQLite gives atomicity and easier querying. Multi-site support is a natural fit.
+
+  ---
+  Section 7 (revised): Server Data Directory
+
+  ./data/
+  ├── chunks/
+  │   ├── 00.db    (chunks where hash starts with 00)
+  │   ├── 01.db    (chunks where hash starts with 01)
+  │   ├── ...
+  │   └── ff.db    (256 databases total)
+  └── index.db     (sites, snapshots, tokens)
+
+  Chunk databases (e.g., a1.db):
+  CREATE TABLE chunks (
+      hash BLOB PRIMARY KEY,  -- 32 bytes
+      data BLOB NOT NULL
+  );
+
+  Index database (index.db):
+  CREATE TABLE sites (
+      hostname TEXT PRIMARY KEY  -- e.g., "example.com"
+  );
+
+  CREATE TABLE snapshots (
+      id INTEGER PRIMARY KEY,
+      hostname TEXT NOT NULL,
+      root_hash BLOB NOT NULL,
+      tree BLOB NOT NULL,        -- msgpack-encoded Node
+      created_at INTEGER NOT NULL,
+      is_current BOOLEAN DEFAULT FALSE,
+      FOREIGN KEY (hostname) REFERENCES sites(hostname)
+  );
+
+  CREATE TABLE tokens (
+      token TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL
+  );
+
+  Atomic flip: Single transaction: insert snapshot → update is_current flags.
+
+  Does this storage model look right?
+
+❯ y
+
+⏺ ---
+  Section 8: Revised CLI (multi-site)
+
+  webpub push <dir> <server-url> --host <hostname>
+      Push directory to server for specific hostname.
+      Example: webpub push ./dist ws://deploy.example.com:9000 --host blog.example.com
+
+  webpub serve --http-port 8080 --sync-port 9000 --data ./data --keep 5
+      Run server. Routes requests by Host header.
+      --keep N: snapshots to retain per site (default: 5)
+
+  webpub rollback <server-url> --host <hostname> [--to <snapshot-id>]
+      Rollback site to previous snapshot (or specific ID).
+      Example: webpub rollback ws://server:9000 --host blog.example.com
+
+  webpub list <server-url> --host <hostname>
+      List snapshots for a site.
+
+  webpub archive <dir> <output.webpub>
+      (unchanged - archives are single-site)
+
+  webpub extract <archive.webpub> <output-dir>
+      (unchanged)
+
+  webpub gc --data ./data
+      Remove unreferenced chunks across all sites.
+
+  webpub token add --data ./data
+  webpub token list --data ./data
+  webpub token revoke <token> --data ./data
+      (unchanged - tokens are global, not per-site)
+
+  Does this CLI look right?
+
+❯ y
+
+⏺ ---
+  Section 9: Dependencies & Crate Structure
+
+  Key dependencies:
+  [dependencies]
+  fastcdc = "3"              # CDC chunking
+  blake3 = "1"               # hashing
+  rmp-serde = "1"            # msgpack serialization
+  serde = { version = "1", features = ["derive"] }
+  rusqlite = { version = "0.31", features = ["bundled"] }
+  tokio = { version = "1", features = ["full"] }
+  tokio-tungstenite = "0.21" # WebSocket
+  axum = "0.7"               # HTTP server
+  clap = { version = "4", features = ["derive"] }  # CLI
+
+  Module structure:
+  src/
+  ├── main.rs           # CLI entry point
+  ├── lib.rs            # public library API
+  ├── scanner.rs        # directory walking
+  ├── chunker.rs        # fastcdc wrapper
+  ├── merkle.rs         # tree building & hashing
+  ├── protocol.rs       # sync message types
+  ├── client/
+  │   ├── mod.rs
+  │   ├── push.rs       # sync to server
+  │   └── archive.rs    # write .webpub file
+  ├── server/
+  │   ├── mod.rs
+  │   ├── sync.rs       # WebSocket handler
+  │   ├── http.rs       # static file serving
+  │   └── storage.rs    # SQLite operations
+  └── extract.rs        # read .webpub file
+
+  Does this structure look right?
+
+❯ y
+
+⏺ ---
+  Section 10: Summary
+
+  webpub - a static website publishing tool with CDC deduplication.
+
+  Key decisions:
+  - fastcdc for chunking, BLAKE3 for hashing
+  - Hierarchical Merkle tree (sorted by name for determinism)
+  - msgpack for all serialization
+  - SQLite storage: 256 chunk DBs (sharded by hash prefix) + index.db
+  - WebSocket binary protocol for sync
+  - Multi-site support via hostname
+  - HTTP server reassembles files on-the-fly from chunks
+  - Keep last N snapshots per site, manual GC
+  - Archive format: header + chunks + index (single .webpub file)
+  - Simplicity and correctness over performance
+
+  CLI:
+  - webpub push / serve / rollback / list (server sync)
+  - webpub archive / extract (standalone archives)
+  - webpub gc / token (maintenance)
+
+  ---
+  Does this complete design look right? Any changes before I write it to a document?
+
+! code .
+  ⎿  (No content)
+
+❯ y
+
+⏺ I'll write the design document and set up git.
+
+⏺ Bash(git init)
+  ⎿  Initialized empty Git repository in ~/w/rusync/.git/
+
+⏺ Bash(mkdir -p docs/plans)
+  ⎿  (No content)
+
+⏺ Write(docs/plans/2026-01-30-webpub-design.md)
+  ⎿  Wrote 341 lines to docs/plans/2026-01-30-webpub-design.md
+     # webpub Design
+
+     Static website publishing tool with content-based deduplication.
+
+     ## Overview
+
+     **webpub** syncs static websites to a server with CDC (content-defined chunking) deduplication. Only changed chunks are
+     transferred. Deployments are atomic with instant rollback support.
+
+     Secondary use case: create standalone `.webpub` archives with built-in deduplication.
+
+     … +331 lines (ctrl+o to expand)
+
+⏺ Bash(git add docs/plans/2026-01-30-webpub-design.md && git commit -m "Add webpub design document…)
+  ⎿  [main (root-commit) aee9c97] Add webpub design document
+      1 file changed, 340 insertions(+)
+      create mode 100644 docs/plans/2026-01-30-webpub-design.md
+
+⏺ Design document written and committed to docs/plans/2026-01-30-webpub-design.md.
+
+  Ready to set up for implementation? I can:
+  - Create an isolated git worktree for development
+  - Write a detailed implementation plan with tasks
+
+✻ Cogitated for 1m 6s
+
+❯ y
+
+⏺ Skill(superpowers:using-git-worktrees)
+  ⎿  Successfully loaded skill
+
+⏺ I'm using the using-git-worktrees skill to set up an isolated workspace.
+
+⏺ Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ No worktree directory exists and no CLAUDE.md preference.
+
+  Where should I create worktrees?
+
+  a) .worktrees/ (project-local, hidden)
+  b) ~/.config/superpowers/worktrees/rusync/ (global location)
+
+❯ No work trees is necessary! I think? local if you must. The whole repository is yours, just `git init` and start building.
+
+⏺ You're right - this is a fresh repo, no need for worktrees. Let me create the implementation plan.
+
+⏺ Skill(superpowers:writing-plans)
+  ⎿  Successfully loaded skill
+
+⏺ I'm using the writing-plans skill to create the implementation plan.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Let me think about the order of implementation:
+
+  1. Project setup - Cargo.toml, basic structure
+  2. Core types - Node, Chunk, etc. (data structures)
+  3. Chunker - fastcdc wrapper with BLAKE3 hashing
+  4. Scanner - directory walking
+  5. Merkle tree - building the tree from scanned files
+  6. Archive format - write and read .webpub files
+  7. Server storage - SQLite layer (chunks + index)
+  8. Server sync - WebSocket protocol handler
+  9. Server HTTP - static file serving
+  10. Client push - sync to server
+  11. CLI - all the commands
+
+  Actually, I should think about what can be tested independently first. The archive use case is simpler and doesn't need
+  networking, so it's a good first milestone.
+
+  Milestone 1: Archive (archive + extract commands)
+  - Project setup
+  - Core types (Node, Chunk)
+  - Chunker (fastcdc + BLAKE3)
+  - Scanner (walk directory)
+  - Merkle tree builder
+  - Archive writer
+  - Archive reader (extract)
+  - CLI: archive and extract commands
+
+  Milestone 2: Server (serve command)
+  - Server storage (SQLite)
+  - Server sync (WebSocket handler)
+  - Server HTTP (static serving)
+  - Token management
+  - CLI: serve, token, gc commands
+
+  Milestone 3: Client (push, rollback, list commands)
+  - Client push (WebSocket client)
+  - Client rollback
+  - Client list
+  - CLI: push, rollback, list commands
+
+  Let me write out the detailed plan with bite-sized tasks.
+
+❯
