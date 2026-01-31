@@ -10,7 +10,7 @@ fn test_scan_empty_directory() {
     // Root directory with no children
     match &entry {
         ScannedEntry::Directory { name, children, .. } => {
-            assert_eq!(name, "");  // root has empty name
+            assert_eq!(name, ""); // root has empty name
             assert!(children.is_empty());
         }
         _ => panic!("Expected directory"),
@@ -47,7 +47,11 @@ fn test_scan_nested_directories() {
         ScannedEntry::Directory { children, .. } => {
             assert_eq!(children.len(), 1);
             match &children[0] {
-                ScannedEntry::Directory { name, children: subchildren, .. } => {
+                ScannedEntry::Directory {
+                    name,
+                    children: subchildren,
+                    ..
+                } => {
                     assert_eq!(name, "subdir");
                     assert_eq!(subchildren.len(), 1);
                 }
@@ -84,10 +88,8 @@ fn test_scan_ignores_symlinks() {
 
     #[cfg(unix)]
     {
-        std::os::unix::fs::symlink(
-            temp.path().join("real.txt"),
-            temp.path().join("link.txt"),
-        ).unwrap();
+        std::os::unix::fs::symlink(temp.path().join("real.txt"), temp.path().join("link.txt"))
+            .unwrap();
     }
 
     let entry = scan_directory(temp.path()).unwrap().next().unwrap();

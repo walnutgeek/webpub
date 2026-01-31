@@ -2,7 +2,9 @@ use webpub::protocol::*;
 
 #[test]
 fn test_auth_message_roundtrip() {
-    let msg = ClientMessage::Auth { token: "secret123".to_string() };
+    let msg = ClientMessage::Auth {
+        token: "secret123".to_string(),
+    };
     let bytes = rmp_serde::to_vec(&msg).unwrap();
     let decoded: ClientMessage = rmp_serde::from_slice(&bytes).unwrap();
 
@@ -30,7 +32,9 @@ fn test_have_chunks_message() {
 
 #[test]
 fn test_server_messages() {
-    let msg = ServerMessage::NeedChunks { hashes: vec![[1u8; 32]] };
+    let msg = ServerMessage::NeedChunks {
+        hashes: vec![[1u8; 32]],
+    };
     let bytes = rmp_serde::to_vec(&msg).unwrap();
     let _: ServerMessage = rmp_serde::from_slice(&bytes).unwrap();
 

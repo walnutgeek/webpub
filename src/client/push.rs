@@ -25,7 +25,9 @@ pub async fn push(
     let (mut ws, _) = connect_async(server_url).await?;
 
     // Authenticate
-    let auth_msg = rmp_serde::to_vec(&ClientMessage::Auth { token: token.to_string() })?;
+    let auth_msg = rmp_serde::to_vec(&ClientMessage::Auth {
+        token: token.to_string(),
+    })?;
     ws.send(Message::Binary(auth_msg)).await?;
 
     let response = ws.next().await.ok_or("Connection closed")??;
@@ -104,9 +106,7 @@ pub async fn push(
             println!("Deployed snapshot {}", snapshot_id);
             Ok(snapshot_id)
         }
-        ServerMessage::CommitFailed { reason } => {
-            Err(format!("Commit failed: {}", reason).into())
-        }
+        ServerMessage::CommitFailed { reason } => Err(format!("Commit failed: {}", reason).into()),
         _ => Err("Unexpected response".into()),
     }
 }

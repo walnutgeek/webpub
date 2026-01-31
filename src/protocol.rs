@@ -3,12 +3,27 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
-    Auth { token: String },
-    HaveChunks { hashes: Vec<[u8; 32]> },
-    ChunkData { hash: [u8; 32], data: Vec<u8> },
-    CommitTree { hostname: String, tree: Node },
-    ListSnapshots { hostname: String },
-    Rollback { hostname: String, snapshot_id: Option<u64> },
+    Auth {
+        token: String,
+    },
+    HaveChunks {
+        hashes: Vec<[u8; 32]>,
+    },
+    ChunkData {
+        hash: [u8; 32],
+        data: Vec<u8>,
+    },
+    CommitTree {
+        hostname: String,
+        tree: Node,
+    },
+    ListSnapshots {
+        hostname: String,
+    },
+    Rollback {
+        hostname: String,
+        snapshot_id: Option<u64>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

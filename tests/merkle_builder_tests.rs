@@ -59,7 +59,11 @@ fn test_build_tree_empty_dir_preserved() {
         Node::Directory { children, .. } => {
             assert_eq!(children.len(), 1);
             match &children[0] {
-                Node::Directory { name, children: subchildren, .. } => {
+                Node::Directory {
+                    name,
+                    children: subchildren,
+                    ..
+                } => {
                     assert_eq!(name, "empty");
                     assert!(subchildren.is_empty());
                 }

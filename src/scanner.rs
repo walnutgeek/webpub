@@ -44,7 +44,11 @@ fn scan_entry(path: &Path, name: &str) -> io::Result<ScannedEntry> {
         metadata.permissions().mode()
     };
     #[cfg(not(unix))]
-    let permissions = if metadata.permissions().readonly() { 0o444 } else { 0o644 };
+    let permissions = if metadata.permissions().readonly() {
+        0o444
+    } else {
+        0o644
+    };
 
     if metadata.is_file() {
         let data = fs::read(path)?;

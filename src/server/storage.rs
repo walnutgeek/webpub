@@ -260,8 +260,8 @@ impl Storage {
         let site_id = self.get_or_create_site(hostname)?;
 
         // Serialize tree
-        let tree_data = rmp_serde::to_vec(tree)
-            .map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let tree_data =
+            rmp_serde::to_vec(tree).map_err(|e| StorageError::Serialization(e.to_string()))?;
 
         let index = self.index.lock().unwrap();
 

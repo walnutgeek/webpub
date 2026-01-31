@@ -21,7 +21,11 @@ fn test_cli_archive_and_extract() {
 
     // Archive
     let status = webpub_cmd()
-        .args(["archive", source.to_str().unwrap(), archive.to_str().unwrap()])
+        .args([
+            "archive",
+            source.to_str().unwrap(),
+            archive.to_str().unwrap(),
+        ])
         .status()
         .unwrap();
     assert!(status.success());
@@ -35,6 +39,12 @@ fn test_cli_archive_and_extract() {
     assert!(status.success());
 
     // Verify
-    assert_eq!(fs::read_to_string(dest.join("hello.txt")).unwrap(), "Hello!");
-    assert_eq!(fs::read_to_string(dest.join("subdir/world.txt")).unwrap(), "World!");
+    assert_eq!(
+        fs::read_to_string(dest.join("hello.txt")).unwrap(),
+        "Hello!"
+    );
+    assert_eq!(
+        fs::read_to_string(dest.join("subdir/world.txt")).unwrap(),
+        "World!"
+    );
 }

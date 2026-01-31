@@ -28,7 +28,9 @@ async fn handle_request(
     Host(host): Host,
     path: Option<Path<String>>,
 ) -> Response {
-    let path_str = path.map(|p| format!("/{}", p.0)).unwrap_or_else(|| "/".to_string());
+    let path_str = path
+        .map(|p| format!("/{}", p.0))
+        .unwrap_or_else(|| "/".to_string());
 
     // Strip port from host if present
     let hostname = host.split(':').next().unwrap_or(&host);
@@ -69,7 +71,9 @@ async fn handle_request(
     for hash in chunks {
         match state.storage.get_chunk(hash) {
             Ok(Some(chunk_data)) => data.extend(chunk_data),
-            Ok(None) => return (StatusCode::INTERNAL_SERVER_ERROR, "Missing chunk").into_response(),
+            Ok(None) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Missing chunk").into_response()
+            }
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
         }
     }

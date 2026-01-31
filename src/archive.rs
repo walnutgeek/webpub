@@ -48,8 +48,8 @@ pub fn write_archive(path: &Path, tree: &Node, chunks: &[Chunk]) -> io::Result<(
         tree: tree.clone(),
         chunk_offsets,
     };
-    let index_bytes = rmp_serde::to_vec(&index)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let index_bytes =
+        rmp_serde::to_vec(&index).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     let index_offset = offset;
     let index_size = index_bytes.len() as u64;
     writer.write_all(&index_bytes)?;
@@ -79,7 +79,10 @@ pub fn read_archive(archive_path: &Path, output_path: &Path) -> io::Result<()> {
     let mut version = [0u8; 1];
     reader.read_exact(&mut version)?;
     if version[0] != VERSION {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "unsupported version"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "unsupported version",
+        ));
     }
 
     let mut offset_bytes = [0u8; 8];
@@ -112,12 +115,18 @@ fn extract_node(
     chunk_offsets: &HashMap<[u8; 32], (u64, u64)>,
 ) -> io::Result<()> {
     match node {
-        Node::File { name, chunks, permissions, .. } => {
+        Node::File {
+            name,
+            chunks,
+            permissions,
+            ..
+        } => {
             let file_path = base_path.join(name);
             let mut file = File::create(&file_path)?;
 
             for hash in chunks {
-                let (offset, size) = chunk_offsets.get(hash)
+                let (offset, size) = chunk_offsets
+                    .get(hash)
                     .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing chunk"))?;
 
                 reader.seek(SeekFrom::Start(*offset))?;
@@ -133,7 +142,12 @@ fn extract_node(
                 fs::set_permissions(&file_path, fs::Permissions::from_mode(*permissions))?;
             }
         }
-        Node::Directory { name, children, permissions, .. } => {
+        Node::Directory {
+            name,
+            children,
+            permissions,
+            ..
+        } => {
             let dir_path = if name.is_empty() {
                 base_path.to_path_buf()
             } else {

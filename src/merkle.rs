@@ -46,7 +46,12 @@ pub fn build_tree(entry: ScannedEntry) -> (Node, Vec<Chunk>) {
 
 fn build_node(entry: ScannedEntry, all_chunks: &mut Vec<Chunk>) -> Node {
     match entry {
-        ScannedEntry::File { name, permissions, size, data } => {
+        ScannedEntry::File {
+            name,
+            permissions,
+            size,
+            data,
+        } => {
             let chunks: Vec<Chunk> = chunk_data(&data).collect();
             let chunk_hashes: Vec<[u8; 32]> = chunks.iter().map(|c| c.hash).collect();
 
@@ -67,7 +72,11 @@ fn build_node(entry: ScannedEntry, all_chunks: &mut Vec<Chunk>) -> Node {
                 hash,
             }
         }
-        ScannedEntry::Directory { name, permissions, children } => {
+        ScannedEntry::Directory {
+            name,
+            permissions,
+            children,
+        } => {
             let child_nodes: Vec<Node> = children
                 .into_iter()
                 .map(|c| build_node(c, all_chunks))

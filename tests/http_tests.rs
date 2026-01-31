@@ -17,15 +17,13 @@ fn test_find_node_in_tree() {
             Node::Directory {
                 name: "css".to_string(),
                 permissions: 0o755,
-                children: vec![
-                    Node::File {
-                        name: "style.css".to_string(),
-                        permissions: 0o644,
-                        size: 50,
-                        chunks: vec![[3u8; 32]],
-                        hash: [4u8; 32],
-                    },
-                ],
+                children: vec![Node::File {
+                    name: "style.css".to_string(),
+                    permissions: 0o644,
+                    size: 50,
+                    chunks: vec![[3u8; 32]],
+                    hash: [4u8; 32],
+                }],
                 hash: [5u8; 32],
             },
         ],

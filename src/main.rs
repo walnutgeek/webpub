@@ -223,7 +223,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let token = std::env::var("WEBPUB_TOKEN")
                 .map_err(|_| "WEBPUB_TOKEN environment variable not set")?;
 
-            let snapshot_id = webpub::client::rollback::rollback(&server, &host, &token, to).await?;
+            let snapshot_id =
+                webpub::client::rollback::rollback(&server, &host, &token, to).await?;
             println!("Rolled back {} to snapshot {}", host, snapshot_id);
         }
     }

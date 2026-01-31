@@ -20,9 +20,12 @@ async fn test_push_and_serve() {
     let mut server = Command::new(env!("CARGO_BIN_EXE_webpub"))
         .args([
             "serve",
-            "--http-port", "18080",
-            "--sync-port", "19000",
-            "--data", data_dir.to_str().unwrap(),
+            "--http-port",
+            "18080",
+            "--sync-port",
+            "19000",
+            "--data",
+            data_dir.to_str().unwrap(),
         ])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -45,7 +48,8 @@ async fn test_push_and_serve() {
             "push",
             site_dir.to_str().unwrap(),
             "ws://127.0.0.1:19000",
-            "--host", "test.local",
+            "--host",
+            "test.local",
         ])
         .env("WEBPUB_TOKEN", &token)
         .status()

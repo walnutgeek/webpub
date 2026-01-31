@@ -85,8 +85,14 @@ fn test_roundtrip_nested_structure() {
     read_archive(&archive_path, &extract_path).unwrap();
 
     // Verify
-    assert_eq!(fs::read_to_string(extract_path.join("root.txt")).unwrap(), "root");
-    assert_eq!(fs::read_to_string(extract_path.join("subdir/nested.txt")).unwrap(), "nested");
+    assert_eq!(
+        fs::read_to_string(extract_path.join("root.txt")).unwrap(),
+        "root"
+    );
+    assert_eq!(
+        fs::read_to_string(extract_path.join("subdir/nested.txt")).unwrap(),
+        "nested"
+    );
 }
 
 #[test]

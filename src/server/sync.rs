@@ -60,10 +60,8 @@ async fn handle_sync(
         match client_msg {
             ClientMessage::HaveChunks { hashes } => {
                 let have = storage.has_chunks(&hashes)?;
-                let need: Vec<[u8; 32]> = hashes
-                    .into_iter()
-                    .filter(|h| !have.contains(h))
-                    .collect();
+                let need: Vec<[u8; 32]> =
+                    hashes.into_iter().filter(|h| !have.contains(h)).collect();
 
                 let response = rmp_serde::to_vec(&ServerMessage::NeedChunks { hashes: need })?;
                 ws.send(Message::Binary(response)).await?;
@@ -106,7 +104,10 @@ async fn handle_sync(
                 let response = rmp_serde::to_vec(&ServerMessage::SnapshotList { snapshots })?;
                 ws.send(Message::Binary(response)).await?;
             }
-            ClientMessage::Rollback { hostname, snapshot_id } => {
+            ClientMessage::Rollback {
+                hostname,
+                snapshot_id,
+            } => {
                 // If no snapshot_id given, use previous (second most recent)
                 let snapshots = storage.list_snapshots(&hostname)?;
                 let target_id = match snapshot_id {
