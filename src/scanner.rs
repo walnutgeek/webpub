@@ -29,38 +29,10 @@ impl ScannedEntry {
 
 /// Scan a directory recursively, returning entries sorted by name.
 /// Ignores symlinks and special files.
-/// Returns a flattened iterator: root directory first, then all children recursively.
+/// Returns an iterator yielding the root entry as a tree structure.
 pub fn scan_directory(path: &Path) -> io::Result<impl Iterator<Item = ScannedEntry>> {
     let entry = scan_entry(path, "")?;
-    Ok(flatten_entry(entry).into_iter())
-}
-
-/// Flatten a ScannedEntry tree into a Vec, with each directory followed by its children.
-fn flatten_entry(entry: ScannedEntry) -> Vec<ScannedEntry> {
-    match entry {
-        ScannedEntry::File { .. } => vec![entry],
-        ScannedEntry::Directory { name, permissions, children } => {
-            let mut result = Vec::new();
-
-            // Collect flattened children
-            let mut flattened_children = Vec::new();
-            for child in children {
-                flattened_children.extend(flatten_entry(child));
-            }
-
-            // Add the directory itself (with empty children since we're flattening)
-            result.push(ScannedEntry::Directory {
-                name,
-                permissions,
-                children: Vec::new(),
-            });
-
-            // Add all children
-            result.extend(flattened_children);
-
-            result
-        }
-    }
+    Ok(std::iter::once(entry))
 }
 
 fn scan_entry(path: &Path, name: &str) -> io::Result<ScannedEntry> {

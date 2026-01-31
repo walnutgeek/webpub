@@ -5,13 +5,13 @@ use webpub::scanner::{scan_directory, ScannedEntry};
 #[test]
 fn test_scan_empty_directory() {
     let temp = TempDir::new().unwrap();
-    let entries: Vec<ScannedEntry> = scan_directory(temp.path()).unwrap().collect();
+    let entry = scan_directory(temp.path()).unwrap().next().unwrap();
 
-    // Root directory only
-    assert_eq!(entries.len(), 1);
-    match &entries[0] {
-        ScannedEntry::Directory { name, .. } => {
+    // Root directory with no children
+    match &entry {
+        ScannedEntry::Directory { name, children, .. } => {
             assert_eq!(name, "");  // root has empty name
+            assert!(children.is_empty());
         }
         _ => panic!("Expected directory"),
     }
@@ -23,10 +23,15 @@ fn test_scan_with_files() {
     fs::write(temp.path().join("a.txt"), "hello").unwrap();
     fs::write(temp.path().join("b.txt"), "world").unwrap();
 
-    let entries: Vec<ScannedEntry> = scan_directory(temp.path()).unwrap().collect();
+    let entry = scan_directory(temp.path()).unwrap().next().unwrap();
 
-    // Root + 2 files
-    assert_eq!(entries.len(), 3);
+    // Root with 2 file children
+    match &entry {
+        ScannedEntry::Directory { children, .. } => {
+            assert_eq!(children.len(), 2);
+        }
+        _ => panic!("Expected directory"),
+    }
 }
 
 #[test]
@@ -35,10 +40,22 @@ fn test_scan_nested_directories() {
     fs::create_dir(temp.path().join("subdir")).unwrap();
     fs::write(temp.path().join("subdir/file.txt"), "content").unwrap();
 
-    let entries: Vec<ScannedEntry> = scan_directory(temp.path()).unwrap().collect();
+    let entry = scan_directory(temp.path()).unwrap().next().unwrap();
 
-    // Root + subdir + file
-    assert_eq!(entries.len(), 3);
+    // Root with subdir, subdir has file
+    match &entry {
+        ScannedEntry::Directory { children, .. } => {
+            assert_eq!(children.len(), 1);
+            match &children[0] {
+                ScannedEntry::Directory { name, children: subchildren, .. } => {
+                    assert_eq!(name, "subdir");
+                    assert_eq!(subchildren.len(), 1);
+                }
+                _ => panic!("Expected subdirectory"),
+            }
+        }
+        _ => panic!("Expected directory"),
+    }
 }
 
 #[test]
@@ -48,11 +65,16 @@ fn test_scan_sorted_by_name() {
     fs::write(temp.path().join("a.txt"), "a").unwrap();
     fs::write(temp.path().join("m.txt"), "m").unwrap();
 
-    let entries: Vec<ScannedEntry> = scan_directory(temp.path()).unwrap().collect();
+    let entry = scan_directory(temp.path()).unwrap().next().unwrap();
 
-    // Skip root, check file order
-    let names: Vec<&str> = entries.iter().skip(1).map(|e| e.name()).collect();
-    assert_eq!(names, vec!["a.txt", "m.txt", "z.txt"]);
+    // Check file order in children
+    match &entry {
+        ScannedEntry::Directory { children, .. } => {
+            let names: Vec<&str> = children.iter().map(|e| e.name()).collect();
+            assert_eq!(names, vec!["a.txt", "m.txt", "z.txt"]);
+        }
+        _ => panic!("Expected directory"),
+    }
 }
 
 #[test]
@@ -68,9 +90,14 @@ fn test_scan_ignores_symlinks() {
         ).unwrap();
     }
 
-    let entries: Vec<ScannedEntry> = scan_directory(temp.path()).unwrap().collect();
+    let entry = scan_directory(temp.path()).unwrap().next().unwrap();
 
-    // Root + real file only (symlink ignored)
-    #[cfg(unix)]
-    assert_eq!(entries.len(), 2);
+    // Root with real file only (symlink ignored)
+    match &entry {
+        ScannedEntry::Directory { children, .. } => {
+            #[cfg(unix)]
+            assert_eq!(children.len(), 1);
+        }
+        _ => panic!("Expected directory"),
+    }
 }
