@@ -37,6 +37,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set version from tag (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          rm -f Cargo.toml.bak
+          echo "Set version to $VERSION"
+
+      - name: Set version from tag (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          (Get-Content Cargo.toml) -replace '^version = ".*"', "version = `"$version`"" | Set-Content Cargo.toml
+          Write-Host "Set version to $version"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
