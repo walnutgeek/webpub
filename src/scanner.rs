@@ -89,6 +89,6 @@ fn scan_entry(path: &Path, name: &str) -> io::Result<ScannedEntry> {
         })
     } else {
         // Special file - treat as empty directory to skip
-        Err(io::Error::new(io::ErrorKind::Other, "special file"))
+        Err(io::Error::other("special file"))
     }
 }

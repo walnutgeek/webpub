@@ -99,7 +99,7 @@ impl Storage {
     /// Get the chunk database connection for a given hash prefix
     fn get_chunk_db(&self, prefix: u8) -> Result<()> {
         let mut dbs = self.chunk_dbs.lock().unwrap();
-        if !dbs.contains_key(&prefix) {
+        if let std::collections::hash_map::Entry::Vacant(e) = dbs.entry(prefix) {
             let db_path = self
                 .base_path
                 .join("chunks")
@@ -114,7 +114,7 @@ impl Storage {
                 "#,
                 [],
             )?;
-            dbs.insert(prefix, conn);
+            e.insert(conn);
         }
         Ok(())
     }

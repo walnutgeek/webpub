@@ -44,7 +44,7 @@ async fn handle_sync(
     }
 
     let response = rmp_serde::to_vec(&ServerMessage::AuthOk)?;
-    ws.send(Message::Binary(response.into())).await?;
+    ws.send(Message::Binary(response)).await?;
 
     // Handle sync messages
     while let Some(msg) = ws.next().await {

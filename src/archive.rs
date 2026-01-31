@@ -49,7 +49,7 @@ pub fn write_archive(path: &Path, tree: &Node, chunks: &[Chunk]) -> io::Result<(
         chunk_offsets,
     };
     let index_bytes =
-        rmp_serde::to_vec(&index).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        rmp_serde::to_vec(&index).map_err(io::Error::other)?;
     let index_offset = offset;
     let index_size = index_bytes.len() as u64;
     writer.write_all(&index_bytes)?;
