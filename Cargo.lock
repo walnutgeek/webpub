@@ -1170,6 +1170,7 @@ dependencies = [
  "fastcdc",
  "hex",
  "mime_guess",
+ "rand",
  "rmp-serde",
  "rusqlite",
  "serde",
