@@ -1,5 +1,7 @@
 # webpub
 
+[![crates.io](https://img.shields.io/crates/v/webpub.svg)](https://crates.io/crates/webpub)
+
 Static website publishing with content-based deduplication.
 
 ## Features
