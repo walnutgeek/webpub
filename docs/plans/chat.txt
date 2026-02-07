@@ -817,3 +817,7 @@
   Let me write out the detailed plan with bite-sized tasks.
 
 ❯
+.... Unfortunately I did not save when it actually when Claude implemented whole plan. It took about hour and half...
+
+And with few tweaks project https://github.com/walnutgeek/webpub/ was published as crate https://crates.io/crates/webpub same evening.
+
